@@ -43,11 +43,23 @@ class TabnetModel:
             X_valid = self.x.loc[self.x[self.fold_feature] == fold].drop(self.fold_feature, axis=1).values
             y_valid = self.y.loc[self.y[self.fold_feature] == fold].drop(self.fold_feature, axis=1).values.flatten()
 
-            self.models[fold].fit(X_train=X_train, y_train=y_train, eval_set=[(X_valid, y_valid)],
-                                  patience=30, max_epochs=100, eval_metric=['accuracy'])
+            print(f'x_train: {X_train}')
+            print(f'y_train: {y_train}')
+            print(f'x_valid: {X_valid}')
+            print(f'x_train_len: {len(X_train)}')
+            print(f'y_train_len: {len(y_train)}')
+            print(f'x_valid_len: {len(X_valid)}')
 
-            full_preds[self.y.loc[self.y[self.fold_feature] == fold].index] = \
-                self.models[fold].predict_proba(X_valid)[:, 1]
+            if self.objective_type == 'regression':
+                self.models[fold].fit(X_train=X_train, y_train=y_train.reshape(-1, 1),
+                                      eval_set=[(X_valid, y_valid.reshape(-1, 1))],
+                                      patience=30, max_epochs=100)
+                full_preds[self.y.loc[self.y[self.fold_feature] == fold].index] = self.models[fold].predict(X_valid)
+            else:
+                self.models[fold].fit(X_train=X_train, y_train=y_train, eval_set=[(X_valid, y_valid)],
+                                      patience=30, max_epochs=100)
+                full_preds[self.y.loc[self.y[self.fold_feature] == fold].index] = \
+                    self.models[fold].predict_proba(X_valid)[:, 1]
 
         return full_preds
 
@@ -71,15 +83,16 @@ class TabnetModel:
 
         if self.objective_type == 'binary':
             return metric_func(self.y.drop(self.fold_feature, axis=1), np.rint(preds))
+        elif self.objective_type == 'regression':
+            return metric_func(self.y.drop(self.fold_feature, axis=1), preds)
         else:
             print('Wrong objective_type Tabnet')
             exit()
 
-    def fit(self, metric_func, num_trials=100):
+    def fit(self, metric_func, direction_func, num_trials=100):
         if metric_func:
             objective_caller = lambda trials: self.objective(trials, metric_func)
-            direction = 'minimize' if self.objective_type == 'regression' else 'maximize'
-            study = optuna.create_study(direction=direction)
+            study = optuna.create_study(direction=direction_func)
             study.optimize(objective_caller, n_trials=num_trials)
             self.params = study.best_trial.params
         else:
@@ -103,7 +116,10 @@ class TabnetModel:
         new_x = self.data_preprocessing(x)
         preds = np.zeros(len(x))
         for i in range(self.num_folds):
-            preds = preds + self.models[i].predict_proba(new_x.values)[:, 1]
+            if self.objective_type == 'regression':
+                preds = preds + self.models[i].predict(new_x.values)
+            else:
+                preds = preds + self.models[i].predict_proba(new_x.values)[:, 1]
         return preds / self.num_folds
     """preds = pd.DataFrame()
     preds.index = range(len(x))

@@ -19,7 +19,10 @@ class CatBoostModel:
         return CatBoostModel.__name__
 
     def train(self, params):
-        self.models = [CatBoostClassifier(**params) for _ in range(self.num_folds)]
+        if self.objective_type == 'regression':
+            self.models = [CatBoostRegressor(**params) for _ in range(self.num_folds)]
+        else:
+            self.models = [CatBoostClassifier(**params) for _ in range(self.num_folds)]
 
         full_preds = np.zeros(len(self.y))
 
@@ -30,7 +33,10 @@ class CatBoostModel:
             y_valid = self.y.loc[self.y[self.fold_feature] == fold].drop(self.fold_feature, axis=1)
             self.models[fold].fit(x_train, y_train, eval_set=[(x_valid, y_valid)], verbose=0, early_stopping_rounds=100)
 
-            full_preds[y_valid.index] = self.models[fold].predict_proba(x_valid)[:, 1]
+            if self.objective_type == 'regression':
+                full_preds[y_valid.index] = self.models[fold].predict(x_valid)
+            else:
+                full_preds[y_valid.index] = self.models[fold].predict_proba(x_valid)[:, 1]
 
         return full_preds
 
@@ -54,15 +60,18 @@ class CatBoostModel:
             param["objective"] = "Logloss"
             preds = self.train(param)
             return metric_func(self.y.drop(self.fold_feature, axis=1), np.rint(preds))
+        elif self.objective_type == 'regression':
+            param["objective"] = "RMSE"
+            preds = self.train(param)
+            return metric_func(self.y.drop(self.fold_feature, axis=1), preds)
         else:
             print('Wrong objective_type CatBoost')
             exit()
 
-    def fit(self, metric_func, num_trials=100):
+    def fit(self, metric_func, direction_func, num_trials=100):
         if metric_func:
             objective_caller = lambda trials: self.objective(trials, metric_func)
-            direction = 'minimize' if self.objective_type == 'regression' else 'maximize'
-            study = optuna.create_study(direction=direction)
+            study = optuna.create_study(direction=direction_func)
             study.optimize(objective_caller, n_trials=num_trials)
             self.params = study.best_trial.params
         else:
@@ -85,7 +94,10 @@ class CatBoostModel:
             self.models = models
         preds = np.zeros(len(x))
         for i in range(self.num_folds):
-            preds = preds + self.models[i].predict_proba(x)[:, 1]
+            if self.objective_type == 'regression':
+                preds += self.models[i].predict(x)
+            else:
+                preds += self.models[i].predict_proba(x)[:, 1]
         return preds / self.num_folds
     """preds = pd.DataFrame()
     preds.index = range(len(x))

@@ -1,5 +1,9 @@
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score, roc_auc_score, mean_squared_error
+from sklearn.model_selection import StratifiedKFold, KFold
+from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score, roc_auc_score
+from sklearn.metrics import (explained_variance_score, r2_score)
+from sklearn.metrics import (max_error, mean_absolute_error, mean_squared_error, mean_squared_log_error,
+                             median_absolute_error, mean_poisson_deviance, mean_gamma_deviance,
+                             mean_absolute_percentage_error)
 import numpy as np
 import optuna
 
@@ -13,11 +17,12 @@ class EnsemblesAggregator:
     """
     objective: binary, multiclass or regression
     """
-    def __init__(self, x, y, objective_type, num_folds=5):
+    def __init__(self, x, y, objective_type, num_folds=5, evaluation_func=None):
         self.x = x.copy()
         self.y = y.copy()
         self.num_folds = num_folds
         self.objective_type = objective_type
+        self.evaluation_func = evaluation_func
 
         self.models_dict = dict()
         self.preds_dict = dict()
@@ -36,7 +41,10 @@ class EnsemblesAggregator:
         print(f'sxlen: {len(self.x)}')
         print(f'sylen: {len(self.y)}')
 
-        kfolds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
+        if self.objective_type == 'regression':
+            kfolds = KFold(n_splits=num_folds, shuffle=True, random_state=0)
+        else:
+            kfolds = StratifiedKFold(n_splits=num_folds, shuffle=True, random_state=0)
         for fold, (_, val_ind) in enumerate(kfolds.split(self.x, self.y.drop('fold', axis=1))):
             self.x.loc[val_ind, 'fold'] = fold
             self.y.loc[val_ind, 'fold'] = fold
@@ -60,17 +68,25 @@ class EnsemblesAggregator:
 
         if self.objective_type == 'multiclass':
             target_preds = np.argmax(target_preds, axis=1)
-            return f1_score(self.y, target_preds, average='weighted')
+            return f1_score(self.y.drop('fold', axis=1), target_preds, average='weighted')
         elif self.objective_type == 'binary':
             #print(f'tpreds: {target_preds}')
             #print(f'tpredshape: {target_preds.shape}')
             #target_preds = np.rint(target_preds)
             return roc_auc_score(self.y.drop('fold', axis=1), target_preds)
         elif self.objective_type == 'regression':
-            return mean_squared_error(self.y, target_preds)
+            if self.evaluation_func:
+                print(f'tp: {target_preds}')
+                print(f'tplen: {len(target_preds)}')
+                print(f'tpy: {self.y.drop("fold", axis=1)}')
+                print(f'tpleny: {len(self.y.drop("fold", axis=1))}')
+                return self.evaluation_func(self.y.drop('fold', axis=1), target_preds.reshape(-1, 1))
+            else:
+                return mean_squared_error(self.y.drop('fold', axis=1), target_preds)
 
     def optuna_weights(self, num_trials=1000):
-        study = optuna.create_study(direction="maximize")
+        direction = 'minimize' if self.objective_type == 'regression' else 'maximize'
+        study = optuna.create_study(direction=direction)
         study.optimize(self.objective, n_trials=num_trials)
 
         self.weights_dict = study.best_trial.params
@@ -97,22 +113,40 @@ class EnsemblesAggregator:
                 self.models.append(LGBModel(self.x, self.y, self.objective_type, self.num_folds))
             elif str_model == 'xgboost':
                 self.models.append(XGBModel(self.x, self.y, self.objective_type, self.num_folds))
-            elif str_model == 'tabnet':
-                self.models.append(TabnetModel(self.x, self.y, self.objective_type, self.num_folds))
-
+            #elif str_model == 'tabnet':
+            #    self.models.append(TabnetModel(self.x, self.y, self.objective_type, self.num_folds))
 
         metric_funcs = None
+        direction_funcs = None
         if self.objective_type == 'binary':
             metric_funcs = [
                 f1_score, accuracy_score, precision_score, recall_score, roc_auc_score, None
+            ]
+            direction_funcs = [
+                'maximize', 'maximize', 'maximize', 'maximize', 'maximize', 'maximize'
             ]
         elif self.objective_type == 'multiclass':
             metric_funcs = [
                 f1_score, accuracy_score, precision_score, recall_score, None
             ]
+            direction_funcs = [
+                'maximize', 'maximize', 'maximize', 'maximize', 'maximize'
+            ]
+        elif self.objective_type == 'regression':
+            metric_funcs = [
+                max_error, mean_absolute_error, mean_squared_error, #mean_squared_log_error,
+                median_absolute_error, #mean_poisson_deviance,
+                #mean_gamma_deviance,
+                mean_absolute_percentage_error, explained_variance_score, r2_score, None
+            ]
+            direction_funcs = [
+                'minimize', 'minimize', 'minimize', 'minimize',
+                'minimize', #'minimize', 'minimize', 'minimize',
+                'maximize', 'maximize', 'minimize'
+            ]
 
         for e, model in enumerate(self.models):
-            for metric_func in metric_funcs:
+            for d, metric_func in enumerate(metric_funcs):
                 func_name = 'none'
                 if metric_func:
                     func_name = metric_func.__name__
@@ -121,7 +155,7 @@ class EnsemblesAggregator:
                 print(f'CurrentType: {name}')
                 self.names.append(name)
                 self.preds_dict[f'{name}'], self.models_dict[f'{name}'] = \
-                    model.fit(num_trials=num_trials, metric_func=metric_func)
+                    model.fit(num_trials=num_trials, metric_func=metric_func, direction_func=direction_funcs[d])
 
         self.optuna_weights(num_trials=num_trials*10)
         print(f'mdict: {self.models_dict}')

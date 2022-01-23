@@ -44,7 +44,7 @@ class XGBModel:
         param = {
             "verbosity": 0,
             # use exact for small dataset.
-            "tree_method": "exact",
+            #"tree_method": "exact",
             # defines booster, gblinear for linear functions.
             "booster": trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
             # L2 regularization weight.
@@ -77,15 +77,18 @@ class XGBModel:
             param["objective"] = "binary:logistic"
             preds = self.train(param)
             return metric_func(self.y.drop(self.fold_feature, axis=1), np.rint(preds))
+        elif self.objective_type == 'regression':
+            param["objective"] = "reg:squarederror"
+            preds = self.train(param)
+            return metric_func(self.y.drop(self.fold_feature, axis=1), preds)
         else:
             print('Wrong objective_type XGBoost')
             exit()
 
-    def fit(self, metric_func, num_trials=100):
+    def fit(self, metric_func, direction_func, num_trials=100):
         if metric_func:
             objective_caller = lambda trials: self.objective(trials, metric_func)
-            direction = 'minimize' if self.objective_type == 'regression' else 'maximize'
-            study = optuna.create_study(direction=direction)
+            study = optuna.create_study(direction=direction_func)
             study.optimize(objective_caller, n_trials=num_trials)
             self.params = study.best_trial.params
         else:

@@ -42,7 +42,7 @@ if __name__ == '__main__':
     print(f'ylen: {len(y)}')
 
     ea = EnsemblesAggregator(x, y, objective_type='binary')
-    ea.fit(num_trials=2, models_types=['lightgbm', 'tabnet'])
+    ea.fit(num_trials=100, models_types=['xgboost'])
     preds = ea.predict(df_test)
 
     preds = np.rint(preds)
