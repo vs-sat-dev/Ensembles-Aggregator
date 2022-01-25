@@ -35,13 +35,18 @@ class TabnetModel:
         elif self.objective_type == 'regression':
             self.models = [TabNetRegressor(**params) for _ in range(self.num_folds)]
 
-        full_preds = np.zeros(len(self.y))
+        full_preds = np.zeros((len(self.y), 1))
 
         for fold in range(self.num_folds):
             X_train = self.x.loc[self.x[self.fold_feature] != fold].drop(self.fold_feature, axis=1).values
             y_train = self.y.loc[self.y[self.fold_feature] != fold].drop(self.fold_feature, axis=1).values.flatten()
             X_valid = self.x.loc[self.x[self.fold_feature] == fold].drop(self.fold_feature, axis=1).values
             y_valid = self.y.loc[self.y[self.fold_feature] == fold].drop(self.fold_feature, axis=1).values.flatten()
+
+            X_train = np.array(X_train, dtype=np.float32)
+            y_train = np.array(y_train, dtype=np.float32)
+            X_valid = np.array(X_valid, dtype=np.float32)
+            y_valid = np.array(y_valid, dtype=np.float32)
 
             print(f'x_train: {X_train}')
             print(f'y_train: {y_train}')
@@ -84,7 +89,13 @@ class TabnetModel:
         if self.objective_type == 'binary':
             return metric_func(self.y.drop(self.fold_feature, axis=1), np.rint(preds))
         elif self.objective_type == 'regression':
-            return metric_func(self.y.drop(self.fold_feature, axis=1), preds)
+
+            try:
+                res = metric_func(self.y.drop(self.fold_feature, axis=1), preds)
+            except:
+                res = metric_func(self.y.drop(self.fold_feature, axis=1), np.abs(preds))
+
+            return res
         else:
             print('Wrong objective_type Tabnet')
             exit()

@@ -44,7 +44,7 @@ if __name__ == '__main__':
     y = df_train[[target_feature]]
 
     ea = EnsemblesAggregator(x, y, objective_type='regression', evaluation_func=smape)
-    ea.fit(num_trials=100)
+    ea.fit(num_trials=2)
     preds = ea.predict(df_test)
 
     submission[target_feature] = preds.tolist()

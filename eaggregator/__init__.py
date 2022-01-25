@@ -113,8 +113,8 @@ class EnsemblesAggregator:
                 self.models.append(LGBModel(self.x, self.y, self.objective_type, self.num_folds))
             elif str_model == 'xgboost':
                 self.models.append(XGBModel(self.x, self.y, self.objective_type, self.num_folds))
-            #elif str_model == 'tabnet':
-            #    self.models.append(TabnetModel(self.x, self.y, self.objective_type, self.num_folds))
+            elif str_model == 'tabnet':
+                self.models.append(TabnetModel(self.x, self.y, self.objective_type, self.num_folds))
 
         metric_funcs = None
         direction_funcs = None
@@ -134,14 +134,14 @@ class EnsemblesAggregator:
             ]
         elif self.objective_type == 'regression':
             metric_funcs = [
-                max_error, mean_absolute_error, mean_squared_error, #mean_squared_log_error,
-                median_absolute_error, #mean_poisson_deviance,
-                #mean_gamma_deviance,
+                max_error, mean_absolute_error, mean_squared_error, mean_squared_log_error,
+                median_absolute_error, mean_poisson_deviance,
+                mean_gamma_deviance,
                 mean_absolute_percentage_error, explained_variance_score, r2_score, None
             ]
             direction_funcs = [
                 'minimize', 'minimize', 'minimize', 'minimize',
-                'minimize', #'minimize', 'minimize', 'minimize',
+                'minimize', 'minimize', 'minimize', 'minimize',
                 'maximize', 'maximize', 'minimize'
             ]
 

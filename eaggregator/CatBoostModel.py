@@ -63,7 +63,13 @@ class CatBoostModel:
         elif self.objective_type == 'regression':
             param["objective"] = "RMSE"
             preds = self.train(param)
-            return metric_func(self.y.drop(self.fold_feature, axis=1), preds)
+
+            try:
+                res = metric_func(self.y.drop(self.fold_feature, axis=1), preds)
+            except:
+                res = metric_func(self.y.drop(self.fold_feature, axis=1), np.abs(preds))
+
+            return res
         else:
             print('Wrong objective_type CatBoost')
             exit()
