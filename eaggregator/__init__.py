@@ -15,7 +15,7 @@ from .XGBModel import XGBModel
 
 class EnsemblesAggregator:
     """
-    objective: binary, multiclass or regression
+    objective_type: binary, multiclass or regression
     """
     def __init__(self, x, y, objective_type, num_folds=5, evaluation_func=None):
         self.x = x.copy()
@@ -80,6 +80,7 @@ class EnsemblesAggregator:
                 print(f'tplen: {len(target_preds)}')
                 print(f'tpy: {self.y.drop("fold", axis=1)}')
                 print(f'tpleny: {len(self.y.drop("fold", axis=1))}')
+                #ValueError: Unable to coerce to DataFrame, shape must be (26298, 1): given (691584804, 1)
                 return self.evaluation_func(self.y.drop('fold', axis=1), target_preds.reshape(-1, 1))
             else:
                 return mean_squared_error(self.y.drop('fold', axis=1), target_preds)
@@ -157,8 +158,9 @@ class EnsemblesAggregator:
                 self.preds_dict[f'{name}'], self.models_dict[f'{name}'] = \
                     model.fit(num_trials=num_trials, metric_func=metric_func, direction_func=direction_funcs[d])
 
-        self.optuna_weights(num_trials=num_trials*10)
+        self.optuna_weights(num_trials=num_trials*50)
         print(f'mdict: {self.models_dict}')
+        print(f'all_weights: {self.weights_dict}')
 
     def predict(self, x):
         out = np.zeros(len(x))

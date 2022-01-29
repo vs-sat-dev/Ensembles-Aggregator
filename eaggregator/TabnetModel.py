@@ -15,6 +15,7 @@ class TabnetModel:
         self.x = self.data_preprocessing(x)
         self.y = y
         self.objective_type = objective_type
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def __repr__(self):
         return TabnetModel.__name__
@@ -35,7 +36,7 @@ class TabnetModel:
         elif self.objective_type == 'regression':
             self.models = [TabNetRegressor(**params) for _ in range(self.num_folds)]
 
-        full_preds = np.zeros((len(self.y), 1))
+        full_preds = np.zeros(len(self.y))
 
         for fold in range(self.num_folds):
             X_train = self.x.loc[self.x[self.fold_feature] != fold].drop(self.fold_feature, axis=1).values
@@ -59,7 +60,10 @@ class TabnetModel:
                 self.models[fold].fit(X_train=X_train, y_train=y_train.reshape(-1, 1),
                                       eval_set=[(X_valid, y_valid.reshape(-1, 1))],
                                       patience=30, max_epochs=100)
-                full_preds[self.y.loc[self.y[self.fold_feature] == fold].index] = self.models[fold].predict(X_valid)
+                print(f'full_preds: {self.models[fold].predict(X_valid)}')
+                print(f'full_preds_shape: {self.models[fold].predict(X_valid).shape}')
+                full_preds[self.y.loc[self.y[self.fold_feature] == fold].index] = \
+                    self.models[fold].predict(X_valid).reshape(-1)
             else:
                 self.models[fold].fit(X_train=X_train, y_train=y_train, eval_set=[(X_valid, y_valid)],
                                       patience=30, max_epochs=100)
@@ -81,6 +85,7 @@ class TabnetModel:
                      lambda_sparse=lambda_sparse, optimizer_fn=torch.optim.Adam,
                      optimizer_params=dict(lr=2e-2, weight_decay=1e-5),
                      mask_type=mask_type, n_shared=n_shared,
+                     device_name=self.device,
                      scheduler_params=dict(mode="min", min_lr=1e-5, factor=0.5,),
                      scheduler_fn=torch.optim.lr_scheduler.ReduceLROnPlateau, verbose=0)
 
@@ -125,10 +130,11 @@ class TabnetModel:
         if models:
             self.models = models
         new_x = self.data_preprocessing(x)
+        new_x = np.array(new_x, dtype=np.float32)
         preds = np.zeros(len(x))
         for i in range(self.num_folds):
             if self.objective_type == 'regression':
-                preds = preds + self.models[i].predict(new_x.values)
+                preds = preds + self.models[i].predict(new_x).reshape(-1)
             else:
                 preds = preds + self.models[i].predict_proba(new_x.values)[:, 1]
         return preds / self.num_folds

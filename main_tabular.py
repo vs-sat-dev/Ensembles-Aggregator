@@ -11,6 +11,7 @@ def prepare_data(data):
     data['day_of_week'] = data['date'].dt.day_of_week
     data['month'] = data['date'].dt.month
     data['year'] = data['date'].dt.year
+    data['dayofyear'] = data['date'].dt.dayofyear
 
     cal = calendar()
     holidays = cal.holidays(start=data['date'].min(), end=data['date'].max())
@@ -44,7 +45,7 @@ if __name__ == '__main__':
     y = df_train[[target_feature]]
 
     ea = EnsemblesAggregator(x, y, objective_type='regression', evaluation_func=smape)
-    ea.fit(num_trials=2)
+    ea.fit(num_trials=1, models_types=['tabnet'])
     preds = ea.predict(df_test)
 
     submission[target_feature] = preds.tolist()
